@@ -53,6 +53,4 @@ Trackit won't let you ignore your goals.
 </p>
 
 ---
-<div align="center">
-  <i>Built with Antigravity IDE</i>
-</div>
+
