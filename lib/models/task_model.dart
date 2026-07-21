@@ -13,6 +13,7 @@ class Task {
   final DateTime deadline;
   final bool requiresProof;
   final String? proofImagePath;
+  final String tag;
 
   const Task({
     required this.id,
@@ -23,6 +24,7 @@ class Task {
     required this.deadline,
     required this.requiresProof,
     this.proofImagePath,
+    this.tag = 'Uncategorized',
   });
 
   Task copyWith({
@@ -34,6 +36,7 @@ class Task {
     DateTime? deadline,
     bool? requiresProof,
     String? proofImagePath,
+    String? tag,
   }) {
     return Task(
       id: id ?? this.id,
@@ -44,6 +47,38 @@ class Task {
       deadline: deadline ?? this.deadline,
       requiresProof: requiresProof ?? this.requiresProof,
       proofImagePath: proofImagePath ?? this.proofImagePath,
+      tag: tag ?? this.tag,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'category': category.name,
+      'progress': progress,
+      'deadline': deadline.toIso8601String(),
+      'requiresProof': requiresProof ? 1 : 0,
+      'proofImagePath': proofImagePath,
+      'tag': tag,
+    };
+  }
+
+  factory Task.fromMap(Map<String, dynamic> map) {
+    return Task(
+      id: map['id'] as String,
+      title: map['title'] as String,
+      description: map['description'] as String,
+      category: TaskCategory.values.firstWhere(
+        (e) => e.name == map['category'] as String,
+        orElse: () => TaskCategory.day,
+      ),
+      progress: (map['progress'] as num).toDouble(),
+      deadline: DateTime.parse(map['deadline'] as String),
+      requiresProof: (map['requiresProof'] as int) == 1,
+      proofImagePath: map['proofImagePath'] as String?,
+      tag: (map['tag'] as String?) ?? 'Uncategorized',
     );
   }
 }

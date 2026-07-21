@@ -4,13 +4,16 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../models/task_model.dart';
 import '../providers/task_provider.dart';
+import '../providers/tag_provider.dart';
 
 class AddTaskModal extends ConsumerStatefulWidget {
   final TaskCategory initialCategory;
+  final Task? existingTask;
   
   const AddTaskModal({
     super.key, 
     this.initialCategory = TaskCategory.day,
+    this.existingTask,
   });
 
   @override
@@ -21,9 +24,31 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   late TaskCategory _selectedCategory;
-  DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedTime = TimeOfDay.now();
-  bool _requiresProof = false;
+  late DateTime _selectedDate;
+  late TimeOfDay _selectedTime;
+  late bool _requiresProof;
+  String _currentTag = '';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingTask != null) {
+      final task = widget.existingTask!;
+      _titleController.text = task.title;
+      _descController.text = task.description;
+      _selectedCategory = task.category;
+      _selectedDate = task.deadline;
+      _selectedTime = TimeOfDay.fromDateTime(task.deadline);
+      _requiresProof = task.requiresProof;
+      _currentTag = task.tag;
+    } else {
+      _selectedCategory = widget.initialCategory;
+      _selectedDate = DateTime.now();
+      _selectedTime = TimeOfDay.now();
+      _requiresProof = false;
+      _currentTag = '';
+    }
+  }
 
   void _submit() {
     if (_titleController.text.isEmpty) {
@@ -41,24 +66,33 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
       _selectedTime.minute,
     );
 
-    final newTask = Task(
-      id: const Uuid().v4(),
-      title: _titleController.text,
-      description: _descController.text,
-      category: _selectedCategory,
-      progress: 0.0,
-      deadline: deadline,
-      requiresProof: _requiresProof,
-    );
+    final finalTag = _currentTag.trim().isEmpty ? 'Uncategorized' : _currentTag.trim();
 
-    ref.read(taskProvider.notifier).addTask(newTask);
+    if (widget.existingTask != null) {
+      final updatedTask = widget.existingTask!.copyWith(
+        title: _titleController.text,
+        description: _descController.text,
+        category: _selectedCategory,
+        deadline: deadline,
+        requiresProof: _requiresProof,
+        tag: finalTag,
+      );
+      ref.read(taskProvider.notifier).updateTask(updatedTask);
+    } else {
+      final newTask = Task(
+        id: const Uuid().v4(),
+        title: _titleController.text,
+        description: _descController.text,
+        category: _selectedCategory,
+        progress: 0.0,
+        deadline: deadline,
+        requiresProof: _requiresProof,
+        tag: finalTag,
+      );
+      ref.read(taskProvider.notifier).addTask(newTask);
+    }
+    
     Navigator.pop(context);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedCategory = widget.initialCategory;
   }
 
   @override
@@ -70,6 +104,8 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
 
   @override
   Widget build(BuildContext context) {
+    final isEditing = widget.existingTask != null;
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -87,9 +123,9 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Add New Task',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              Text(
+                isEditing ? 'Edit Task' : 'Add New Task',
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               TextField(
@@ -106,6 +142,44 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
                   labelText: 'Location / Context',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
+              ),
+              const SizedBox(height: 16),
+              Consumer(
+                builder: (context, ref, child) {
+                  final tags = ref.watch(tagProvider);
+                  return Autocomplete<String>(
+                    initialValue: TextEditingValue(text: _currentTag),
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return tags;
+                      }
+                      return tags.where((String option) {
+                        return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                      });
+                    },
+                    onSelected: (String selection) {
+                      _currentTag = selection;
+                    },
+                    fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                      // Avoid adding multiple listeners if fieldViewBuilder is rebuilt
+                      textEditingController.removeListener(() {}); 
+                      textEditingController.addListener(() {
+                        _currentTag = textEditingController.text;
+                      });
+                      return TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Tag (e.g. Coding, Errands)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onSubmitted: (String value) {
+                          onFieldSubmitted();
+                        },
+                      );
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 16),
               SegmentedButton<TaskCategory>(
@@ -130,7 +204,7 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
                         final date = await showDatePicker(
                           context: context,
                           initialDate: _selectedDate,
-                          firstDate: DateTime.now(),
+                          firstDate: DateTime(2000),
                           lastDate: DateTime(2100),
                         );
                         if (date != null) {
@@ -192,7 +266,10 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Create Task', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(
+                  isEditing ? 'Save Changes' : 'Create Task', 
+                  style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)
+                ),
               ),
               const SizedBox(height: 24),
             ],
@@ -202,3 +279,4 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
     );
   }
 }
+

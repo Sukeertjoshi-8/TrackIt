@@ -4,7 +4,9 @@ import 'package:intl/intl.dart';
 import '../models/task_model.dart';
 import '../providers/task_provider.dart';
 import '../providers/date_provider.dart';
+import '../utils/date_extensions.dart';
 import 'task_card.dart';
+import 'task_options_modal.dart';
 
 class TimelineView extends ConsumerStatefulWidget {
   const TimelineView({super.key});
@@ -26,116 +28,124 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
   @override
   Widget build(BuildContext context) {
     final currentSelectedDate = ref.watch(selectedDateProvider);
-    final tasks = ref.watch(taskProvider);
+    final asyncTasks = ref.watch(taskProvider);
     
-    // Filter tasks for the selected date and 'day' category
-    final dailyTasks = tasks.where((task) {
-      return task.category == TaskCategory.day &&
-          task.deadline.year == currentSelectedDate.year &&
-          task.deadline.month == currentSelectedDate.month &&
-          task.deadline.day == currentSelectedDate.day;
-    }).toList();
+    return asyncTasks.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Error loading tasks: $err')),
+      data: (tasks) {
+        // Filter tasks for the selected date
+        final dailyTasks = tasks.where((task) {
+          return task.category == TaskCategory.day 
+              ? task.deadline.isSameDate(currentSelectedDate)
+              : task.deadline.isSameDate(currentSelectedDate);
+        }).toList();
 
-    // Sort tasks by time
-    dailyTasks.sort((a, b) => a.deadline.compareTo(b.deadline));
+        // Sort tasks by time
+        dailyTasks.sort((a, b) => a.deadline.compareTo(b.deadline));
 
-    return Column(
-      children: [
-        _buildTopHeader(),
-        _buildDateSelector(currentSelectedDate),
-        Expanded(
-          child: dailyTasks.isEmpty
-              ? const Center(child: Text("No tasks for this day.", style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  padding: const EdgeInsets.only(top: 16),
-                  itemCount: dailyTasks.length,
-                  itemBuilder: (context, index) {
-                    final task = dailyTasks[index];
-                    final isLast = index == dailyTasks.length - 1;
-                    final accentColor = _accentColors[index % _accentColors.length];
+        return Column(
+          children: [
+            _buildTopHeader(),
+            _buildDateSelector(currentSelectedDate),
+            Expanded(
+              child: dailyTasks.isEmpty
+                  ? const Center(child: Text("No tasks for this day.", style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(top: 16),
+                      itemCount: dailyTasks.length,
+                      itemBuilder: (context, index) {
+                        final task = dailyTasks[index];
+                        final isLast = index == dailyTasks.length - 1;
+                        final accentColor = _accentColors[index % _accentColors.length];
 
-                    return IntrinsicHeight(
-                      child: Container(
-                        decoration: index == 1 // Highlight the second item for mockup accuracy
-                            ? BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.deepPurple.withValues(alpha: 0.1),
-                                    Colors.transparent
-                                  ],
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                ),
-                              )
-                            : null,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Time Label
-                            SizedBox(
-                              width: 80,
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 16.0),
-                                child: Text(
-                                  DateFormat('hh:mm a').format(task.deadline),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Timeline Node & Line
-                            Column(
+                        return IntrinsicHeight(
+                          child: Container(
+                            decoration: index == 1 // Highlight the second item for mockup accuracy
+                                ? BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.deepPurple.withValues(alpha: 0.1),
+                                        Colors.transparent
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
+                                  )
+                                : null,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  margin: const EdgeInsets.only(top: 14),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white,
-                                    border: Border.all(color: accentColor, width: 2),
-                                  ),
-                                  child: Center(
-                                    child: Icon(
-                                      task.progress == 1.0 ? Icons.check : Icons.circle,
-                                      size: 10,
-                                      color: accentColor,
+                                // Time Label
+                                SizedBox(
+                                  width: 80,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 16.0),
+                                    child: Text(
+                                      DateFormat('hh:mm a').format(task.deadline),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black54,
+                                      ),
                                     ),
                                   ),
                                 ),
-                                if (!isLast)
-                                  Expanded(
-                                    child: Container(
-                                      width: 2,
-                                      color: accentColor.withValues(alpha: 0.5),
+                                // Timeline Node & Line
+                                Column(
+                                  children: [
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      margin: const EdgeInsets.only(top: 14),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                        border: Border.all(color: accentColor, width: 2),
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          task.progress == 1.0 ? Icons.check : Icons.circle,
+                                          size: 10,
+                                          color: accentColor,
+                                        ),
+                                      ),
+                                    ),
+                                    if (!isLast)
+                                      Expanded(
+                                        child: Container(
+                                          width: 2,
+                                          color: accentColor.withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(width: 16),
+                                // Task Card
+                                Expanded(
+                                  child: GestureDetector(
+                                    onLongPress: () => showTaskOptionsModal(context, ref, task),
+                                    child: TaskCard(
+                                      task: task,
+                                      accentColor: accentColor,
+                                      onProgressTapped: () {
+                                        final newProgress = task.progress == 1.0 ? 0.0 : 1.0;
+                                        ref.read(taskProvider.notifier).updateProgress(task.id, newProgress);
+                                      },
                                     ),
                                   ),
+                                ),
                               ],
                             ),
-                            const SizedBox(width: 16),
-                            // Task Card
-                            Expanded(
-                              child: TaskCard(
-                                task: task,
-                                accentColor: accentColor,
-                                onProgressTapped: () {
-                                  final newProgress = task.progress == 1.0 ? 0.0 : 1.0;
-                                  ref.read(taskProvider.notifier).updateProgress(task.id, newProgress);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 
