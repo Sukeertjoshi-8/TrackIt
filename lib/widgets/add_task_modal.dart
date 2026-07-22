@@ -26,8 +26,15 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
   late TaskCategory _selectedCategory;
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
-  late bool _requiresProof;
+  
+  List<int> selectedDays = [];
   String _currentTag = '';
+  
+  int durationYears = 0;
+  int durationMonths = 0;
+  int durationDays = 0;
+  DateTime? exactDeadline;
+  bool requiresPhotoProof = false;
 
   @override
   void initState() {
@@ -39,15 +46,79 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
       _selectedCategory = task.category;
       _selectedDate = task.deadline;
       _selectedTime = TimeOfDay.fromDateTime(task.deadline);
-      _requiresProof = task.requiresProof;
+      requiresPhotoProof = task.requiresPhotoProof;
       _currentTag = task.tag;
+      if (task.frequencyDays != null && task.frequencyDays!.isNotEmpty) {
+        selectedDays = task.frequencyDays!.split(',').map(int.parse).toList();
+      } else {
+        selectedDays = [];
+      }
+      
+      if (task.isParent) {
+        _updateDurationFromDeadline(task.deadline);
+      } else {
+        _updateDeadlineFromDuration();
+      }
     } else {
       _selectedCategory = widget.initialCategory;
       _selectedDate = DateTime.now();
       _selectedTime = TimeOfDay.now();
-      _requiresProof = false;
+      requiresPhotoProof = false;
       _currentTag = '';
+      selectedDays = [];
+      _updateDeadlineFromDuration();
     }
+  }
+
+  void _updateDeadlineFromDuration() {
+    final now = DateTime.now();
+    setState(() {
+      exactDeadline = DateTime(
+        now.year + durationYears,
+        now.month + durationMonths,
+        now.day + durationDays,
+        23,
+        59,
+      );
+    });
+  }
+
+  void _updateDurationFromDeadline(DateTime pickedDate) {
+    final now = DateTime.now();
+    int years = pickedDate.year - now.year;
+    int months = pickedDate.month - now.month;
+    int days = pickedDate.day - now.day;
+
+    if (days < 0) {
+      months -= 1;
+      final prevMonth = DateTime(pickedDate.year, pickedDate.month, 0);
+      days += prevMonth.day;
+    }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+
+    if (years < 0) years = 0;
+    if (months < 0) months = 0;
+    if (days < 0) days = 0;
+
+    setState(() {
+      durationYears = years;
+      durationMonths = months;
+      durationDays = days;
+      exactDeadline = DateTime(pickedDate.year, pickedDate.month, pickedDate.day, 23, 59);
+    });
+  }
+
+  void _toggleDay(int day) {
+    setState(() {
+      if (selectedDays.contains(day)) {
+        selectedDays.remove(day);
+      } else {
+        selectedDays.add(day);
+      }
+    });
   }
 
   void _submit() {
@@ -58,24 +129,33 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
       return;
     }
 
-    final deadline = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour,
-      _selectedTime.minute,
-    );
+    DateTime finalDeadline;
+    if (_selectedCategory == TaskCategory.day) {
+      finalDeadline = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        _selectedTime.hour,
+        _selectedTime.minute,
+      );
+    } else {
+      finalDeadline = exactDeadline ?? DateTime.now();
+    }
 
     final finalTag = _currentTag.trim().isEmpty ? 'Uncategorized' : _currentTag.trim();
+    final isParent = (_selectedCategory == TaskCategory.month || _selectedCategory == TaskCategory.year);
+    final freqDays = selectedDays.isNotEmpty ? selectedDays.join(',') : null;
 
     if (widget.existingTask != null) {
       final updatedTask = widget.existingTask!.copyWith(
         title: _titleController.text,
         description: _descController.text,
         category: _selectedCategory,
-        deadline: deadline,
-        requiresProof: _requiresProof,
+        deadline: finalDeadline,
+        requiresPhotoProof: requiresPhotoProof,
         tag: finalTag,
+        isParent: isParent,
+        frequencyDays: freqDays,
       );
       ref.read(taskProvider.notifier).updateTask(updatedTask);
     } else {
@@ -85,9 +165,11 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
         description: _descController.text,
         category: _selectedCategory,
         progress: 0.0,
-        deadline: deadline,
-        requiresProof: _requiresProof,
+        deadline: finalDeadline,
+        requiresPhotoProof: requiresPhotoProof,
         tag: finalTag,
+        isParent: isParent,
+        frequencyDays: freqDays,
       );
       ref.read(taskProvider.notifier).addTask(newTask);
     }
@@ -161,7 +243,6 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
                       _currentTag = selection;
                     },
                     fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
-                      // Avoid adding multiple listeners if fieldViewBuilder is rebuilt
                       textEditingController.removeListener(() {}); 
                       textEditingController.addListener(() {
                         _currentTag = textEditingController.text;
@@ -196,69 +277,193 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
                 },
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _selectedDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
-                        if (date != null) {
-                          setState(() {
-                            _selectedDate = date;
-                          });
-                        }
-                      },
-                      child: InputDecorator(
+              
+              if (_selectedCategory == TaskCategory.month || _selectedCategory == TaskCategory.year) ...[
+                const Text('Select Habit Days', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8.0,
+                  children: [
+                    for (int i = 1; i <= 7; i++)
+                      FilterChip(
+                        label: Text(['M', 'T', 'W', 'T', 'F', 'S', 'S'][i - 1]),
+                        selected: selectedDays.contains(i),
+                        onSelected: (_) => _toggleDay(i),
+                        selectedColor: const Color(0xFF9C27B0).withValues(alpha: 0.2),
+                        checkmarkColor: const Color(0xFF9C27B0),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text('Duration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_selectedCategory == TaskCategory.year) ...[
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          initialValue: durationYears,
+                          decoration: InputDecoration(
+                            labelText: 'Years',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: [
+                            for (int i = 0; i <= 10; i++)
+                              DropdownMenuItem(value: i, child: Text('$i'))
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                durationYears = val;
+                                _updateDeadlineFromDuration();
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        initialValue: durationMonths,
                         decoration: InputDecoration(
-                          labelText: 'Deadline Date',
+                          labelText: 'Months',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text(DateFormat('MMM dd, yyyy').format(_selectedDate)),
+                        items: [
+                          for (int i = 0; i <= 11; i++)
+                            DropdownMenuItem(value: i, child: Text('$i'))
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              durationMonths = val;
+                              _updateDeadlineFromDuration();
+                            });
+                          }
+                        },
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () async {
-                        final time = await showTimePicker(
-                          context: context,
-                          initialTime: _selectedTime,
-                        );
-                        if (time != null) {
-                          setState(() {
-                            _selectedTime = time;
-                          });
-                        }
-                      },
-                      child: InputDecorator(
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        initialValue: durationDays,
                         decoration: InputDecoration(
-                          labelText: 'Time',
+                          labelText: 'Days',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text(_selectedTime.format(context)),
+                        items: [
+                          for (int i = 0; i <= 31; i++)
+                            DropdownMenuItem(value: i, child: Text('$i'))
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              durationDays = val;
+                              _updateDeadlineFromDuration();
+                            });
+                          }
+                        },
                       ),
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.calendar_month, color: Color(0xFF9C27B0)),
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: exactDeadline ?? DateTime.now(),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+                        );
+                        if (picked != null) {
+                          _updateDurationFromDeadline(picked);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                if (exactDeadline != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      'Calculated Deadline: ${DateFormat('MMM dd, yyyy').format(exactDeadline!)}',
+                      style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                    ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
+              
+              if (_selectedCategory == TaskCategory.day) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _selectedDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              _selectedDate = date;
+                            });
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Deadline Date',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text(DateFormat('MMM dd, yyyy').format(_selectedDate)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () async {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: _selectedTime,
+                          );
+                          if (time != null) {
+                            setState(() {
+                              _selectedTime = time;
+                            });
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Time',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text(_selectedTime.format(context)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+              
               SwitchListTile(
-                title: const Text('Requires Image Proof'),
-                value: _requiresProof,
+                title: const Text('Require Photo Proof'),
+                subtitle: const Text('Must take a picture to complete task'),
+                value: requiresPhotoProof,
                 onChanged: (val) {
                   setState(() {
-                    _requiresProof = val;
+                    requiresPhotoProof = val;
                   });
                 },
                 contentPadding: EdgeInsets.zero,
+                activeTrackColor: const Color(0xFF9C27B0).withValues(alpha: 0.5),
+                activeThumbColor: const Color(0xFF9C27B0),
               ),
               const SizedBox(height: 24),
+              
               ElevatedButton(
                 onPressed: _submit,
                 style: ElevatedButton.styleFrom(
@@ -279,4 +484,3 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
     );
   }
 }
-

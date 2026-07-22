@@ -11,9 +11,13 @@ class Task {
   final TaskCategory category;
   final double progress; // 0.0 to 1.0
   final DateTime deadline;
-  final bool requiresProof;
+  final bool requiresPhotoProof;
   final String? proofImagePath;
   final String tag;
+  final bool isParent;
+  final String? parentId;
+  final String? frequencyDays;
+  final int skippedSessions;
 
   const Task({
     required this.id,
@@ -22,9 +26,13 @@ class Task {
     required this.category,
     required this.progress,
     required this.deadline,
-    required this.requiresProof,
+    required this.requiresPhotoProof,
     this.proofImagePath,
     this.tag = 'Uncategorized',
+    this.isParent = false,
+    this.parentId,
+    this.frequencyDays,
+    this.skippedSessions = 0,
   });
 
   Task copyWith({
@@ -34,9 +42,13 @@ class Task {
     TaskCategory? category,
     double? progress,
     DateTime? deadline,
-    bool? requiresProof,
+    bool? requiresPhotoProof,
     String? proofImagePath,
     String? tag,
+    bool? isParent,
+    String? parentId,
+    String? frequencyDays,
+    int? skippedSessions,
   }) {
     return Task(
       id: id ?? this.id,
@@ -45,9 +57,13 @@ class Task {
       category: category ?? this.category,
       progress: progress ?? this.progress,
       deadline: deadline ?? this.deadline,
-      requiresProof: requiresProof ?? this.requiresProof,
+      requiresPhotoProof: requiresPhotoProof ?? this.requiresPhotoProof,
       proofImagePath: proofImagePath ?? this.proofImagePath,
       tag: tag ?? this.tag,
+      isParent: isParent ?? this.isParent,
+      parentId: parentId ?? this.parentId,
+      frequencyDays: frequencyDays ?? this.frequencyDays,
+      skippedSessions: skippedSessions ?? this.skippedSessions,
     );
   }
 
@@ -59,9 +75,13 @@ class Task {
       'category': category.name,
       'progress': progress,
       'deadline': deadline.toIso8601String(),
-      'requiresProof': requiresProof ? 1 : 0,
+      'requires_photo_proof': requiresPhotoProof ? 1 : 0,
       'proofImagePath': proofImagePath,
       'tag': tag,
+      'is_parent': isParent ? 1 : 0,
+      'parent_id': parentId,
+      'frequency_days': frequencyDays,
+      'skipped_sessions': skippedSessions,
     };
   }
 
@@ -76,9 +96,14 @@ class Task {
       ),
       progress: (map['progress'] as num).toDouble(),
       deadline: DateTime.parse(map['deadline'] as String),
-      requiresProof: (map['requiresProof'] as int) == 1,
+      // Fallback for older db records before migration completes if ever accessed
+      requiresPhotoProof: ((map['requires_photo_proof'] ?? map['requiresProof']) as int?) == 1,
       proofImagePath: map['proofImagePath'] as String?,
       tag: (map['tag'] as String?) ?? 'Uncategorized',
+      isParent: (map['is_parent'] as int?) == 1,
+      parentId: map['parent_id'] as String?,
+      frequencyDays: map['frequency_days'] as String?,
+      skippedSessions: (map['skipped_sessions'] as int?) ?? 0,
     );
   }
 }

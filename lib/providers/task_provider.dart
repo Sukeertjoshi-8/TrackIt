@@ -1,11 +1,50 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task_model.dart';
 import '../repositories/task_repository.dart';
+import 'package:uuid/uuid.dart';
 
 class TaskNotifier extends AsyncNotifier<List<Task>> {
   @override
   Future<List<Task>> build() async {
+    await _generateDailyHabitTasks();
     return ref.read(taskRepositoryProvider).getAllTasks();
+  }
+
+  Future<void> _generateDailyHabitTasks() async {
+    final repo = ref.read(taskRepositoryProvider);
+    final allTasks = await repo.getAllTasks();
+    final now = DateTime.now();
+    final currentWeekday = now.weekday;
+
+    for (final task in allTasks) {
+      if (task.isParent && task.frequencyDays != null) {
+        final days = task.frequencyDays!.split(',').map((e) => int.tryParse(e.trim())).whereType<int>().toList();
+        if (days.contains(currentWeekday)) {
+          final hasChildToday = allTasks.any((t) =>
+            t.parentId == task.id &&
+            t.deadline.year == now.year &&
+            t.deadline.month == now.month &&
+            t.deadline.day == now.day
+          );
+
+          if (!hasChildToday) {
+            final childTask = Task(
+              id: const Uuid().v4(),
+              title: task.title,
+              description: task.description,
+              category: TaskCategory.day,
+              progress: 0.0,
+              deadline: DateTime(now.year, now.month, now.day, 23, 59),
+              requiresPhotoProof: task.requiresPhotoProof,
+              tag: task.tag,
+              isParent: false,
+              parentId: task.id,
+            );
+            await repo.insertTask(childTask);
+          }
+        }
+      }
+    }
   }
 
   Future<void> addTask(Task task) async {
@@ -32,6 +71,9 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
     
     try {
       await ref.read(taskRepositoryProvider).updateTask(task);
+      if (task.parentId != null) {
+        await _syncParentProgress(task.parentId!);
+      }
     } catch (e) {
       state = previousState;
     }
@@ -39,12 +81,29 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
 
   Future<void> removeTask(String id) async {
     final previousState = state;
+    Task? deletedTask;
+    
     if (state.value != null) {
-      state = AsyncData([...state.value!.where((task) => task.id != id)]);
+      try {
+        deletedTask = state.value!.firstWhere((task) => task.id == id);
+        state = AsyncData([...state.value!.where((task) => task.id != id)]);
+      } catch (_) {}
     }
     
     try {
-      await ref.read(taskRepositoryProvider).deleteTask(id);
+      final repo = ref.read(taskRepositoryProvider);
+      await repo.deleteTask(id);
+      
+      // Skip Economy Check
+      if (deletedTask != null && deletedTask.parentId != null) {
+        final allTasks = await repo.getAllTasks();
+        try {
+          final parentTask = allTasks.firstWhere((t) => t.id == deletedTask!.parentId);
+          final updatedParent = parentTask.copyWith(skippedSessions: parentTask.skippedSessions + 1);
+          await repo.updateTask(updatedParent);
+          state = AsyncData(await repo.getAllTasks());
+        } catch (_) {}
+      }
     } catch (e) {
       state = previousState;
     }
@@ -67,9 +126,34 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
     if (updatedTask != null) {
       try {
         await ref.read(taskRepositoryProvider).updateTask(updatedTask);
+        if (updatedTask.parentId != null) {
+          await _syncParentProgress(updatedTask.parentId!);
+        }
       } catch (e) {
         state = previousState;
       }
+    }
+  }
+
+  Future<void> _syncParentProgress(String parentId) async {
+    final repo = ref.read(taskRepositoryProvider);
+    final allTasks = await repo.getAllTasks();
+    
+    try {
+      final parentTask = allTasks.firstWhere((t) => t.id == parentId);
+      final children = allTasks.where((t) => t.parentId == parentId).toList();
+      
+      if (children.isEmpty) return;
+      
+      final completedChildren = children.where((t) => t.progress >= 1.0).length;
+      final newProgress = completedChildren / children.length;
+      
+      final updatedParent = parentTask.copyWith(progress: newProgress);
+      await repo.updateTask(updatedParent);
+      
+      state = AsyncData(await repo.getAllTasks());
+    } catch (e) {
+      // Parent not found, ignore
     }
   }
 }

@@ -21,7 +21,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'trackit_database.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -36,9 +36,13 @@ class DatabaseService {
         category TEXT NOT NULL,
         progress REAL NOT NULL,
         deadline TEXT NOT NULL,
-        requiresProof INTEGER NOT NULL,
+        requires_photo_proof INTEGER NOT NULL DEFAULT 0,
         proofImagePath TEXT,
-        tag TEXT NOT NULL DEFAULT 'Uncategorized'
+        tag TEXT NOT NULL DEFAULT 'Uncategorized',
+        is_parent INTEGER NOT NULL DEFAULT 0,
+        parent_id TEXT,
+        frequency_days TEXT,
+        skipped_sessions INTEGER NOT NULL DEFAULT 0
       )
     ''');
   }
@@ -46,6 +50,16 @@ class DatabaseService {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE tasks ADD COLUMN tag TEXT NOT NULL DEFAULT "Uncategorized"');
+    }
+    if (oldVersion < 3) {
+      // Rename requiresProof to requires_photo_proof
+      await db.execute('ALTER TABLE tasks RENAME COLUMN requiresProof TO requires_photo_proof');
+      
+      // Add new Parent/Child tracking columns
+      await db.execute('ALTER TABLE tasks ADD COLUMN is_parent INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE tasks ADD COLUMN parent_id TEXT');
+      await db.execute('ALTER TABLE tasks ADD COLUMN frequency_days TEXT');
+      await db.execute('ALTER TABLE tasks ADD COLUMN skipped_sessions INTEGER NOT NULL DEFAULT 0');
     }
   }
 

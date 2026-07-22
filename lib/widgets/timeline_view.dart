@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../models/task_model.dart';
 import '../providers/task_provider.dart';
+import '../providers/task_filter_provider.dart';
 import '../providers/date_provider.dart';
 import '../utils/date_extensions.dart';
 import 'task_card.dart';
@@ -16,7 +17,6 @@ class TimelineView extends ConsumerStatefulWidget {
 }
 
 class _TimelineViewState extends ConsumerState<TimelineView> {
-
   final List<Color> _accentColors = [
     Colors.orange,
     Colors.purple,
@@ -29,14 +29,27 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
   Widget build(BuildContext context) {
     final currentSelectedDate = ref.watch(selectedDateProvider);
     final asyncTasks = ref.watch(taskProvider);
-    
+
     return asyncTasks.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, stack) => Center(child: Text('Error loading tasks: $err')),
       data: (tasks) {
+        final filter = ref.watch(taskFilterProvider);
+
+        // Apply global filters first
+        var filteredTasks = tasks;
+        if (filter.hideCompleted) {
+          filteredTasks = filteredTasks.where((t) => t.progress < 1.0).toList();
+        }
+        if (filter.selectedTag != null) {
+          filteredTasks = filteredTasks
+              .where((t) => t.tag == filter.selectedTag)
+              .toList();
+        }
+
         // Filter tasks for the selected date
-        final dailyTasks = tasks.where((task) {
-          return task.category == TaskCategory.day 
+        final dailyTasks = filteredTasks.where((task) {
+          return task.category == TaskCategory.day
               ? task.deadline.isSameDate(currentSelectedDate)
               : task.deadline.isSameDate(currentSelectedDate);
         }).toList();
@@ -46,27 +59,36 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
 
         return Column(
           children: [
-            _buildTopHeader(),
             _buildDateSelector(currentSelectedDate),
             Expanded(
               child: dailyTasks.isEmpty
-                  ? const Center(child: Text("No tasks for this day.", style: TextStyle(color: Colors.grey)))
+                  ? const Center(
+                      child: Text(
+                        "No tasks for this day.",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
                   : ListView.builder(
                       padding: const EdgeInsets.only(top: 16),
                       itemCount: dailyTasks.length,
                       itemBuilder: (context, index) {
                         final task = dailyTasks[index];
                         final isLast = index == dailyTasks.length - 1;
-                        final accentColor = _accentColors[index % _accentColors.length];
+                        final accentColor =
+                            _accentColors[index % _accentColors.length];
 
                         return IntrinsicHeight(
                           child: Container(
-                            decoration: index == 1 // Highlight the second item for mockup accuracy
+                            decoration:
+                                index ==
+                                    1 // Highlight the second item for mockup accuracy
                                 ? BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
-                                        Colors.deepPurple.withValues(alpha: 0.1),
-                                        Colors.transparent
+                                        Colors.deepPurple.withValues(
+                                          alpha: 0.1,
+                                        ),
+                                        Colors.transparent,
                                       ],
                                       begin: Alignment.centerLeft,
                                       end: Alignment.centerRight,
@@ -82,7 +104,9 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                                   child: Padding(
                                     padding: const EdgeInsets.only(top: 16.0),
                                     child: Text(
-                                      DateFormat('hh:mm a').format(task.deadline),
+                                      DateFormat(
+                                        'hh:mm a',
+                                      ).format(task.deadline),
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(
                                         fontSize: 12,
@@ -102,11 +126,16 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         color: Colors.white,
-                                        border: Border.all(color: accentColor, width: 2),
+                                        border: Border.all(
+                                          color: accentColor,
+                                          width: 2,
+                                        ),
                                       ),
                                       child: Center(
                                         child: Icon(
-                                          task.progress == 1.0 ? Icons.check : Icons.circle,
+                                          task.progress == 1.0
+                                              ? Icons.check
+                                              : Icons.circle,
                                           size: 10,
                                           color: accentColor,
                                         ),
@@ -116,7 +145,9 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                                       Expanded(
                                         child: Container(
                                           width: 2,
-                                          color: accentColor.withValues(alpha: 0.5),
+                                          color: accentColor.withValues(
+                                            alpha: 0.5,
+                                          ),
                                         ),
                                       ),
                                   ],
@@ -125,13 +156,24 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                                 // Task Card
                                 Expanded(
                                   child: GestureDetector(
-                                    onLongPress: () => showTaskOptionsModal(context, ref, task),
+                                    onLongPress: () => showTaskOptionsModal(
+                                      context,
+                                      ref,
+                                      task,
+                                    ),
                                     child: TaskCard(
                                       task: task,
                                       accentColor: accentColor,
                                       onProgressTapped: () {
-                                        final newProgress = task.progress == 1.0 ? 0.0 : 1.0;
-                                        ref.read(taskProvider.notifier).updateProgress(task.id, newProgress);
+                                        final newProgress = task.progress == 1.0
+                                            ? 0.0
+                                            : 1.0;
+                                        ref
+                                            .read(taskProvider.notifier)
+                                            .updateProgress(
+                                              task.id,
+                                              newProgress,
+                                            );
                                       },
                                     ),
                                   ),
@@ -149,27 +191,10 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
     );
   }
 
-  Widget _buildTopHeader() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Icon(Icons.arrow_back_ios, size: 20, color: Colors.black87),
-          Row(
-            children: const [
-              Icon(Icons.search, size: 24, color: Colors.black87),
-              SizedBox(width: 16),
-              Icon(Icons.tune, size: 24, color: Colors.black87),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDateSelector(DateTime selectedDate) {
-    final startOfWeek = selectedDate.subtract(Duration(days: selectedDate.weekday % 7));
+    final startOfWeek = selectedDate.subtract(
+      Duration(days: selectedDate.weekday % 7),
+    );
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
@@ -191,7 +216,7 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Appointment date',
+                ' Date',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -211,7 +236,10 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.purple.shade100),
                     borderRadius: BorderRadius.circular(16),
@@ -227,7 +255,11 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.purple.shade300),
+                      Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: Colors.purple.shade300,
+                      ),
                     ],
                   ),
                 ),
@@ -255,8 +287,13 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
     );
   }
 
-  Widget _buildDateItem(DateTime date, DateTime selectedDate, {bool hideDayLabel = false}) {
-    final isSelected = date.year == selectedDate.year &&
+  Widget _buildDateItem(
+    DateTime date,
+    DateTime selectedDate, {
+    bool hideDayLabel = false,
+  }) {
+    final isSelected =
+        date.year == selectedDate.year &&
         date.month == selectedDate.month &&
         date.day == selectedDate.day;
 
@@ -276,7 +313,7 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                     color: Colors.pinkAccent.withValues(alpha: 0.4),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
-                  )
+                  ),
                 ]
               : [],
         ),

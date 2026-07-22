@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../widgets/timeline_view.dart';
 import '../widgets/month_view.dart';
 import '../widgets/year_view.dart';
 import '../widgets/analytics_dashboard.dart';
 import '../widgets/add_task_modal.dart';
+import '../widgets/global_task_search_delegate.dart';
+import '../widgets/filter_bottom_sheet.dart';
 import '../models/task_model.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
 
   void _showAddTaskModal() {
@@ -66,6 +70,37 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        centerTitle: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'TrackIt',
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            fontSize: 24,
+            color: const Color(0xFF9C27B0),
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search, color: Color(0xFF9C27B0)),
+            onPressed: () {
+              showSearch(
+                context: context,
+                delegate: GlobalTaskSearchDelegate(ref),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.filter_list, color: Color(0xFF9C27B0)),
+            onPressed: () {
+              showTaskFilterBottomSheet(context);
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: IndexedStack(
           index: _currentIndex,

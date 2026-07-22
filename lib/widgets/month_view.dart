@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task_model.dart';
 import '../providers/task_provider.dart';
+import '../providers/task_filter_provider.dart';
 import 'month_task_card.dart';
 import 'task_options_modal.dart';
 
@@ -16,7 +17,18 @@ class MonthView extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, stack) => Center(child: Text('Error loading tasks: $err')),
       data: (tasks) {
-        final monthTasks = tasks.where((t) => t.category == TaskCategory.month).toList();
+        final filter = ref.watch(taskFilterProvider);
+        
+        // Apply global filters first
+        var filteredTasks = tasks;
+        if (filter.hideCompleted) {
+          filteredTasks = filteredTasks.where((t) => t.progress < 1.0).toList();
+        }
+        if (filter.selectedTag != null) {
+          filteredTasks = filteredTasks.where((t) => t.tag == filter.selectedTag).toList();
+        }
+
+        final monthTasks = filteredTasks.where((t) => t.category == TaskCategory.month).toList();
         monthTasks.sort((a, b) => a.deadline.compareTo(b.deadline));
 
         return Column(
