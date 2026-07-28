@@ -119,8 +119,8 @@ class AnalyticsDashboard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Completed: $completed/$total',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                  '${(progress * 100).toInt()}% completed',
+                  style: const TextStyle(color: Colors.grey, fontSize: 14),
                 ),
                 const SizedBox(height: 8),
                 ClipRRect(
@@ -128,7 +128,7 @@ class AnalyticsDashboard extends ConsumerWidget {
                   child: LinearProgressIndicator(
                     value: progress,
                     backgroundColor: Colors.grey.shade300,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.purple),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
                     minHeight: 6,
                   ),
                 ),

@@ -21,7 +21,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'trackit_database.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -37,12 +37,13 @@ class DatabaseService {
         progress REAL NOT NULL,
         deadline TEXT NOT NULL,
         requires_photo_proof INTEGER NOT NULL DEFAULT 0,
-        proofImagePath TEXT,
+        photoProofPath TEXT,
         tag TEXT NOT NULL DEFAULT 'Uncategorized',
         is_parent INTEGER NOT NULL DEFAULT 0,
         parent_id TEXT,
         frequency_days TEXT,
-        skipped_sessions INTEGER NOT NULL DEFAULT 0
+        skipped_sessions INTEGER NOT NULL DEFAULT 0,
+        completed_at TEXT
       )
     ''');
   }
@@ -60,6 +61,12 @@ class DatabaseService {
       await db.execute('ALTER TABLE tasks ADD COLUMN parent_id TEXT');
       await db.execute('ALTER TABLE tasks ADD COLUMN frequency_days TEXT');
       await db.execute('ALTER TABLE tasks ADD COLUMN skipped_sessions INTEGER NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE tasks RENAME COLUMN proofImagePath TO photoProofPath');
+    }
+    if (oldVersion < 5) {
+      await db.execute('ALTER TABLE tasks ADD COLUMN completed_at TEXT');
     }
   }
 

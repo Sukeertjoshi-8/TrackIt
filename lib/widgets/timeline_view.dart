@@ -164,16 +164,26 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                                     child: TaskCard(
                                       task: task,
                                       accentColor: accentColor,
-                                      onProgressTapped: () {
+                                      onProgressTapped: (photoPath) {
                                         final newProgress = task.progress == 1.0
                                             ? 0.0
                                             : 1.0;
-                                        ref
-                                            .read(taskProvider.notifier)
-                                            .updateProgress(
-                                              task.id,
-                                              newProgress,
-                                            );
+                                        if (photoPath != null) {
+                                          final updatedTask = task.copyWith(
+                                            progress: newProgress,
+                                            photoProofPath: photoPath,
+                                            completedAt: newProgress == 1.0 ? DateTime.now() : null,
+                                            clearCompletedAt: newProgress < 1.0,
+                                          );
+                                          ref.read(taskProvider.notifier).updateTask(updatedTask);
+                                        } else {
+                                          ref
+                                              .read(taskProvider.notifier)
+                                              .updateProgress(
+                                                task.id,
+                                                newProgress,
+                                              );
+                                        }
                                       },
                                     ),
                                   ),

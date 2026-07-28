@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task_model.dart';
@@ -14,13 +15,36 @@ class CategoryHistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final int totalTasks = tasks.length;
+    final int completedTasksCount = tasks.where((t) => t.progress >= 1.0).length;
+    final double percentage = totalTasks == 0 ? 0.0 : (completedTasksCount / totalTasks);
+
     // Only show completed tasks
     final completedTasks = tasks.where((t) => t.progress >= 1.0).toList();
     completedTasks.sort((a, b) => b.deadline.compareTo(a.deadline));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('$tag History'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$tag History'),
+            const SizedBox(height: 2),
+            Text(
+              '${(percentage * 100).toInt()}% completed',
+              style: const TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(6.0),
+          child: LinearProgressIndicator(
+            value: percentage,
+            backgroundColor: Colors.grey.shade300,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+            minHeight: 6,
+          ),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
@@ -38,6 +62,8 @@ class CategoryHistoryScreen extends StatelessWidget {
               separatorBuilder: (context, index) => const Divider(),
               itemBuilder: (context, index) {
                 final task = completedTasks[index];
+                bool hasPhoto = task.photoProofPath != null && task.photoProofPath!.isNotEmpty;
+
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Container(
@@ -53,9 +79,35 @@ class CategoryHistoryScreen extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
-                    'Completed on ${DateFormat('MMM d, yyyy').format(task.deadline)}',
+                    task.completedAt != null
+                        ? 'Completed on ${DateFormat('MMM d, yyyy • h:mm a').format(task.completedAt!)}'
+                        : 'Completed on ${DateFormat('MMM d, yyyy').format(task.deadline)}',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
+                  trailing: hasPhoto ? const Icon(Icons.photo_camera, color: Colors.green) : null,
+                  onTap: () {
+                    if (hasPhoto) {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (context) => Container(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Proof of Work', style: Theme.of(context).textTheme.titleLarge),
+                              const SizedBox(height: 16),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(File(task.photoProofPath!)),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                  },
                 );
               },
             ),

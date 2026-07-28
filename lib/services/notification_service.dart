@@ -8,7 +8,7 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
     tz.initializeTimeZones();
@@ -22,8 +22,31 @@ class NotificationService {
       iOS: initializationSettingsDarwin,
     );
 
-    await _flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
+    await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
   }
+
+  Future<void> scheduleTaskReminder(Task task, DateTime deadline) async {
+    final tz.TZDateTime reminderTime = tz.TZDateTime.from(deadline.subtract(const Duration(hours: 1)), tz.local);
+    
+    // Only schedule if the reminder time is in the future
+    if (reminderTime.isAfter(tz.TZDateTime.now(tz.local))) {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        id: task.id.hashCode, 
+        title: 'Task Pending: ${task.title}',
+        body: 'Your task "${task.title}" is pending and close to its deadline!',
+        scheduledDate: reminderTime,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails('task_deadline_channel', 'Task Deadlines', importance: Importance.high),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
+    }
+  }
+
+  Future<void> cancelAll() async {
+    await flutterLocalNotificationsPlugin.cancelAll();
+  }
+
 
   /// Stubs out escalating notifications for a strict task tracker app.
   Future<void> scheduleEscalatingNotifications(Task task) async {
@@ -47,7 +70,7 @@ class NotificationService {
 
     // Schedule only if the deadline is in the future
     if (task.deadline.isAfter(DateTime.now())) {
-      await _flutterLocalNotificationsPlugin.zonedSchedule(
+      await flutterLocalNotificationsPlugin.zonedSchedule(
         id: task.id.hashCode,
         title: 'Critical Task Missed!',
         body: 'You missed the deadline for ${task.title}. Upload proof now!',

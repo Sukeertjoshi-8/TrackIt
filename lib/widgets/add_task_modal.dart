@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../models/task_model.dart';
 import '../providers/task_provider.dart';
 import '../providers/tag_provider.dart';
+import '../services/notification_service.dart';
 
 class AddTaskModal extends ConsumerStatefulWidget {
   final TaskCategory initialCategory;
@@ -158,6 +159,7 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
         frequencyDays: freqDays,
       );
       ref.read(taskProvider.notifier).updateTask(updatedTask);
+      NotificationService().scheduleTaskReminder(updatedTask, finalDeadline);
     } else {
       final newTask = Task(
         id: const Uuid().v4(),
@@ -172,6 +174,7 @@ class _AddTaskModalState extends ConsumerState<AddTaskModal> {
         frequencyDays: freqDays,
       );
       ref.read(taskProvider.notifier).addTask(newTask);
+      NotificationService().scheduleTaskReminder(newTask, finalDeadline);
     }
     
     Navigator.pop(context);

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task_model.dart';
 import '../repositories/task_repository.dart';
+
 import 'package:uuid/uuid.dart';
 
 class TaskNotifier extends AsyncNotifier<List<Task>> {
@@ -117,7 +118,11 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
       state = AsyncData([
         for (final t in state.value!)
           if (t.id == id) 
-            (updatedTask = t.copyWith(progress: progress))
+            (updatedTask = t.copyWith(
+              progress: progress,
+              completedAt: progress == 1.0 ? DateTime.now() : null,
+              clearCompletedAt: progress < 1.0,
+            ))
           else 
             t,
       ]);
@@ -134,6 +139,7 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
       }
     }
   }
+
 
   Future<void> _syncParentProgress(String parentId) async {
     final repo = ref.read(taskRepositoryProvider);
