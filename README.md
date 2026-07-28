@@ -30,7 +30,7 @@ Whether you are committing to daily deep work sessions, mastering a new skill, l
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/TrackIt.git
+   git clone https://github.com/Sukeertjoshi-8/TrackIt.git
    cd TrackIt
    ```
 
